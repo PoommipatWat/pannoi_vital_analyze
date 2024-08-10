@@ -53,6 +53,7 @@ def process_roi(image, x1, y1, x2, y2):
     threshold = cv2.threshold(contrast, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
     result = reader.readtext(threshold, detail=0)
     detected_text = " ".join(result).strip()
+    print(f'aa : {detected_text}')
     return threshold, detected_text
 
 # Updated regions of interest for vital signs
