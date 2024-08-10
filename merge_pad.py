@@ -3,12 +3,11 @@ import numpy as np
 from pupil_apriltags import Detector
 import matplotlib.pyplot as plt
 import easyocr
-from collections import Counter
 
 # Initialize AprilTag detector
 at_detector = Detector(
     families="tag36h11",
-    nthreads=4,
+    nthreads=1,
     quad_decimate=1.0,
     quad_sigma=0.0,
     refine_edges=1,
@@ -17,26 +16,15 @@ at_detector = Detector(
 )
 
 # Initialize EasyOCR reader
-reader = easyocr.Reader(['en'], gpu=True)
+reader = easyocr.Reader(['en'], gpu=False)
 
 # Open webcam
 cap = cv2.VideoCapture(0)
-if not cap.isOpened():
-    print("Error: Could not open camera.")
-    exit()
-
 cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75)
 
 # Create matplotlib window
 plt.ion()
-fig = plt.figure(figsize=(20, 10))
-ax1 = plt.subplot2grid((2, 4), (0, 0), colspan=2)
-ax2 = plt.subplot2grid((2, 4), (0, 2), colspan=2)
-ax3 = plt.subplot2grid((2, 4), (1, 0))
-ax4 = plt.subplot2grid((2, 4), (1, 1))
-ax5 = plt.subplot2grid((2, 4), (1, 2))
-ax6 = plt.subplot2grid((2, 4), (1, 3))
-axes = [ax3, ax4, ax5, ax6]
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 7))
 
 def sort_corners(corners):
     center = np.mean(corners, axis=0)
@@ -51,20 +39,18 @@ def process_roi(image, x1, y1, x2, y2):
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     contrast = clahe.apply(gray)
     threshold = cv2.threshold(contrast, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
+    
     result = reader.readtext(threshold, detail=0)
     detected_text = " ".join(result).strip()
-    return threshold, detected_text
+    return detected_text
 
-# Updated regions of interest for vital signs
+# Define regions of interest for vital signs
 roi_positions = [
-    {'pulse': [1400, 276, 1610, 400]},
-    {'spo2': [1390, 400, 1540, 504]},
-    {'Dia': [318, 869, 518, 971]},
-    {'Sys': [545, 865, 688, 970]}
+    {'pulse': [876, 696, 922, 732]},
+    {'spo2': [874, 730, 918, 780]},
+    {'Dia': [535, 900, 595, 940]},
+    {'Sys': [602, 900, 644, 934]}
 ]
-
-# Initialize lists to store vital signs
-vital_signs_history = {key: [] for item in roi_positions for key in item.keys()}
 
 while True:
     ret, frame = cap.read()
@@ -89,8 +75,8 @@ while True:
             pts_src_temp.append(center)
 
     # Clear previous output
-    for ax in [ax1, ax2, ax3, ax4, ax5, ax6]:
-        ax.clear()
+    ax1.clear()
+    ax2.clear()
 
     # Display original frame
     ax1.imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -100,6 +86,7 @@ while True:
     if len(pts_src_temp) >= 4:
         pts_src_array = np.array(pts_src_temp[:4], dtype='float32')
         pts_src_array = sort_corners(pts_src_array)
+        
         pts_dst = np.array([
             [0, 0],
             [1920 - 1, 0],
@@ -112,19 +99,10 @@ while True:
 
         # Process ROIs and detect vital signs
         vital_signs = {}
-        for i, item in enumerate(roi_positions):
+        for item in roi_positions:
             for key, value in item.items():
-                roi_image, detected_text = process_roi(warped_image, value[0], value[1], value[2], value[3])
+                detected_text = process_roi(warped_image, value[0], value[1], value[2], value[3])
                 vital_signs[key] = detected_text
-                
-                # Store detected value
-                if len(vital_signs_history[key]) < 20:
-                    vital_signs_history[key].append(detected_text)
-                
-                # Display ROI
-                axes[i].imshow(roi_image, cmap='gray')
-                axes[i].set_title(f'{key}: {detected_text} ({len(vital_signs_history[key])}/20)')
-                axes[i].axis('off')
 
         # Display warped image
         ax2.imshow(cv2.cvtColor(warped_image, cv2.COLOR_BGR2RGB))
@@ -132,34 +110,18 @@ while True:
         ax2.axis('off')
 
         # Display detected vital signs as text
-        plt.figtext(0.5, 0.02, f"Detected Vital Signs: {vital_signs}", ha="center", fontsize=12,
+        plt.figtext(0.5, 0.01, f"Detected Vital Signs: {vital_signs}", ha="center", fontsize=12, 
                     bbox={"facecolor":"white", "alpha":0.5, "pad":5})
     else:
         ax2.text(0.5, 0.5, 'Waiting for 4 AprilTags', ha='center', va='center', transform=ax2.transAxes)
         ax2.axis('off')
-        for ax in axes:
-            ax.text(0.5, 0.5, 'No ROI', ha='center', va='center', transform=ax.transAxes)
-            ax.axis('off')
 
     plt.tight_layout()
     plt.draw()
     plt.pause(0.001)
-
-    # Check if all vital signs have 20 readings
-    if all(len(values) >= 20 for values in vital_signs_history.values()):
-        break
 
     if plt.waitforbuttonpress(0.001):
         break
 
 cap.release()
 plt.close(fig)
-
-# Calculate and display the mode for each vital sign
-print("\nFinal Results (Mode of 20 readings):")
-for key, values in vital_signs_history.items():
-    if values:
-        mode = Counter(values).most_common(1)[0][0]
-        print(f"{key}: {mode}")
-    else:
-        print(f"{key}: No readings")

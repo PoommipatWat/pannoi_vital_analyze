@@ -42,6 +42,8 @@ def add_numbers_to_image(input_image_path, numbers, positions, font_path, font_s
     # วาง img_with_numbers บนพื้นหลัง
     background[y_offset:y_offset+img_with_numbers.shape[0], x_offset:x_offset+img_with_numbers.shape[1]] = img_with_numbers
 
+    background = cv2.resize(background, (1280, 720))
+
     # บันทึกและแสดงรูปภาพ
     save = cv2.imwrite('save.jpg', background)
 
@@ -51,7 +53,7 @@ def add_numbers_to_image(input_image_path, numbers, positions, font_path, font_s
 
 # ตัวอย่างการใช้งาน
 input_image = "mx400_clear.jpg"
-numbers_to_add = [128, 98, 60, 119, 80]  # ตัวเลขตัวอย่าง ปรับตามต้องการ
+numbers_to_add = [102, 34, 56, 789, 17]  # ตัวเลขตัวอย่าง ปรับตามต้องการ
 positions = [(1545, 150), (1530, 305), (170, 770), (165, 965), (445, 965)]  # ตำแหน่งตัวอย่าง ปรับตามต้องการ
 font_sizes = [175, 175, 175, 175, 175]  # ขนาดฟอนต์ตัวอย่าง ปรับตามต้องการ
 text_colors = [(24, 221, 9), (3, 235, 254), (3, 235, 254), (252, 44, 237), (252, 44, 237)]  # สีตัวอย่าง ปรับตามต้องการ (สีแดง, สีเขียว, สีน้ำเงิน, สีเหลือง)
