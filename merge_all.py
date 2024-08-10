@@ -7,6 +7,10 @@ from paddleocr import PaddleOCR
 import keras_ocr
 from collections import Counter
 
+import time
+
+sample_len = 20
+
 # Initialize AprilTag detector
 at_detector = Detector(
     families="tag36h11",
@@ -71,7 +75,6 @@ def process_roi(image, x1, y1, x2, y2):
     except Exception as e:
         print(f"PaddleOCR error: {e}")
         pad_text = ""
-        
     # Keras-OCR
     try:
         keras_result = keras_pipeline.recognize([roi_resized])
@@ -89,6 +92,8 @@ roi_positions = [
     {'Dia': [318, 869, 518, 971]},
     {'Sys': [545, 865, 688, 970]}
 ]
+
+prev_time = time.time()
 
 # Initialize dictionaries to store vital signs
 vital_signs_history = {key: {'easy': [], 'paddle': [], 'keras': []} for item in roi_positions for key in item.keys()}
@@ -145,16 +150,16 @@ while True:
                 vital_signs[key] = f"Easy: {easy_text}, Paddle: {pad_text}, Keras: {keras_text}"
                 
                 # Store detected values
-                if len(vital_signs_history[key]['easy']) < 20:
+                if len(vital_signs_history[key]['easy']) < sample_len:
                     vital_signs_history[key]['easy'].append(easy_text)
-                if len(vital_signs_history[key]['paddle']) < 20:
+                if len(vital_signs_history[key]['paddle']) < sample_len:
                     vital_signs_history[key]['paddle'].append(pad_text)
-                if len(vital_signs_history[key]['keras']) < 20:
+                if len(vital_signs_history[key]['keras']) < sample_len:
                     vital_signs_history[key]['keras'].append(keras_text)
                 
                 # Display ROI
                 axes[i].imshow(roi_image, cmap='gray')
-                axes[i].set_title(f'{key}: E:{easy_text} P:{pad_text} K:{keras_text} ({len(vital_signs_history[key]["easy"])}/20)')
+                axes[i].set_title(f'{key}: E:{easy_text} P:{pad_text} K:{keras_text} ({len(vital_signs_history[key]["easy"])}/{sample_len})')
                 axes[i].axis('off')
 
         # Display warped image
@@ -172,12 +177,12 @@ while True:
             ax.text(0.5, 0.5, 'No ROI', ha='center', va='center', transform=ax.transAxes)
             ax.axis('off')
 
-    plt.tight_layout()
-    plt.draw()
-    plt.pause(0.001)
+    # plt.tight_layout()
+    # plt.draw()
+    # plt.pause(0.000001)
 
     # Check if all vital signs have 20 readings from all OCR systems
-    if all(len(values['easy']) >= 20 and len(values['paddle']) >= 20 and len(values['keras']) >= 20 for values in vital_signs_history.values()):
+    if all(len(values['easy']) >= sample_len and len(values['paddle']) >= sample_len and len(values['keras']) >= sample_len for values in vital_signs_history.values()):
         break
 
     if plt.waitforbuttonpress(0.001):
@@ -204,9 +209,9 @@ for key, values in vital_signs_history.items():
         paddle_correct = sum(1 for v in values['paddle'] if v == mode)
         keras_correct = sum(1 for v in values['keras'] if v == mode)
         
-        easy_accuracy = (easy_correct / 20) * 100
-        paddle_accuracy = (paddle_correct / 20) * 100
-        keras_accuracy = (keras_correct / 20) * 100
+        easy_accuracy = (easy_correct / sample_len) * 100
+        paddle_accuracy = (paddle_correct / sample_len) * 100
+        keras_accuracy = (keras_correct / sample_len) * 100
         
         print(f"EasyOCR Accuracy: {easy_accuracy:.2f}%")
         print(f"PaddleOCR Accuracy: {paddle_accuracy:.2f}%")
@@ -219,11 +224,14 @@ total_easy_correct = sum(sum(1 for v in values['easy'] if v == Counter(values['e
 total_paddle_correct = sum(sum(1 for v in values['paddle'] if v == Counter(values['easy'] + values['paddle'] + values['keras']).most_common(1)[0][0]) for values in vital_signs_history.values())
 total_keras_correct = sum(sum(1 for v in values['keras'] if v == Counter(values['easy'] + values['paddle'] + values['keras']).most_common(1)[0][0]) for values in vital_signs_history.values())
 
-total_easy_accuracy = (total_easy_correct / (20 * len(vital_signs_history))) * 100
-total_paddle_accuracy = (total_paddle_correct / (20 * len(vital_signs_history))) * 100
-total_keras_accuracy = (total_keras_correct / (20 * len(vital_signs_history))) * 100
+total_easy_accuracy = (total_easy_correct / (sample_len * len(vital_signs_history))) * 100
+total_paddle_accuracy = (total_paddle_correct / (sample_len * len(vital_signs_history))) * 100
+total_keras_accuracy = (total_keras_correct / (sample_len * len(vital_signs_history))) * 100
 
 print("\nOverall Accuracy:")
 print(f"EasyOCR: {total_easy_accuracy:.2f}%")
 print(f"PaddleOCR: {total_paddle_accuracy:.2f}%")
 print(f"Keras-OCR: {total_keras_accuracy:.2f}%")
+
+# print in seconds
+print(time.time() - prev_time)
