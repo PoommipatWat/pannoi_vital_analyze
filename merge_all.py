@@ -27,7 +27,7 @@ pad_ocr = PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False)
 keras_pipeline = keras_ocr.pipeline.Pipeline()
 
 # Open webcam
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(-1)
 if not cap.isOpened():
     print("Error: Could not open camera.")
     exit()
@@ -86,10 +86,10 @@ def process_roi(image, x1, y1, x2, y2):
 
 # Updated regions of interest for vital signs
 roi_positions = [
-    {'pulse': [1372, 266, 1570, 370]},
-    {'spo2': [1354, 375, 1495, 478]},
-    {'Dia': [296, 837, 482, 938]},
-    {'Sys': [514, 840, 641, 932]}
+    {'pulse': [1372, 262, 1570, 370]},
+    {'spo2': [1350, 370, 1495, 478]},
+    {'Dia': [290, 835, 482, 935]},
+    {'Sys': [500, 835, 645, 935]}
 ]
 
 prev_time = time.time()
@@ -99,6 +99,7 @@ vital_signs_history = {key: {'easy': [], 'paddle': [], 'keras': []} for item in 
 
 while True:
     ret, frame = cap.read()
+    frame = cv2.resize(frame, (1920, 1080))
     if not ret:
         print("Cannot read from webcam")
         break
