@@ -4,11 +4,14 @@ from pupil_apriltags import Detector
 import matplotlib.pyplot as plt
 import easyocr
 from paddleocr import PaddleOCR
-from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 from PIL import Image
 from collections import Counter
 import time
 import torch
+from doctr.io import DocumentFile
+from doctr.models import ocr_predictor
+from doctr.io import DocumentFile
+import os
 
 sample_len = 3
 
@@ -27,13 +30,11 @@ at_detector = Detector(
 easy_reader = easyocr.Reader(['en'], gpu=False)
 pad_ocr = PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False)
 
-# Initialize TrOCR
-processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-printed')
-model = VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-base-printed')
+# Initialize docTR
+doctr_model = ocr_predictor(pretrained=True)
 
 # Use GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(device)
 
 # Open webcam
 cap = cv2.VideoCapture(-1)
@@ -80,7 +81,7 @@ def sort_corners(corners):
 
 def process_roi(image, x1, y1, x2, y2):
     roi = image[y1:y2, x1:x2]
-    roi_resized = cv2.resize(roi, (500, 250))
+    roi_resized = cv2.resize(roi, (250, 125))
     gray = cv2.cvtColor(roi_resized, cv2.COLOR_BGR2GRAY)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     contrast = clahe.apply(gray)
@@ -102,20 +103,21 @@ def process_roi(image, x1, y1, x2, y2):
         print(f"PaddleOCR error: {e}")
         pad_text = ""
 
-    # TrOCR
+    # docTR
     try:
-        # Convert grayscale image to RGB
         rgb_image = cv2.cvtColor(threshold, cv2.COLOR_GRAY2RGB)
-        pil_image = Image.fromarray(rgb_image)
-        pixel_values = processor(pil_image, return_tensors="pt").pixel_values.to(device)
-        generated_ids = model.generate(pixel_values)
-        trocr_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        trocr_text = "".join([char for char in trocr_text if char.isdigit()]).strip()
+        #save the image
+        cv2.imwrite("temp.png", rgb_image)
+        single_img_doc = DocumentFile.from_images("temp.png")
+        doctr_result = doctr_model(single_img_doc)
+        doctr_text = "".join([char for block in doctr_result.pages[0].blocks for line in block.lines for word in line.words for char in word.value if char.isdigit()]).strip()
+        # Remove the temporary file
+        os.remove("temp.png")
     except Exception as e:
-        print(f"TrOCR error: {e}")
-        trocr_text = ""
+        print(f"docTR error: {e}")
+        doctr_text = ""
     
-    return threshold, easy_text, pad_text, trocr_text
+    return threshold, easy_text, pad_text, doctr_text
 
 # Updated regions of interest for vital signs
 roi_positions = [
@@ -200,23 +202,23 @@ plt.pause(1)  # Pause to show the "Collection Complete" status
 
 # Process collected warped images
 update_status("Processing")
-vital_signs_history = {key: {'easy': [], 'paddle': [], 'trocr': []} for item in roi_positions for key in item.keys()}
+vital_signs_history = {key: {'easy': [], 'paddle': [], 'doctr': []} for item in roi_positions for key in item.keys()}
 
 for idx, warped_image in enumerate(warped_images):
     vital_signs = {}
     for i, item in enumerate(roi_positions):
         for key, value in item.items():
-            roi_image, easy_text, pad_text, trocr_text = process_roi(warped_image, value[0], value[1], value[2], value[3])
-            vital_signs[key] = f"Easy: {easy_text}, Paddle: {pad_text}, TrOCR: {trocr_text}"
+            roi_image, easy_text, pad_text, doctr_text = process_roi(warped_image, value[0], value[1], value[2], value[3])
+            vital_signs[key] = f"Easy: {easy_text}, Paddle: {pad_text}, docTR: {doctr_text}"
             
             vital_signs_history[key]['easy'].append(easy_text)
             vital_signs_history[key]['paddle'].append(pad_text)
-            vital_signs_history[key]['trocr'].append(trocr_text)
+            vital_signs_history[key]['doctr'].append(doctr_text)
             
             # Display ROI
             axes[i].clear()
             axes[i].imshow(roi_image, cmap='gray')
-            axes[i].set_title(f'{key}: E:{easy_text} P:{pad_text} T:{trocr_text}')
+            axes[i].set_title(f'{key}: E:{easy_text} P:{pad_text} D:{doctr_text}')
             axes[i].axis('off')
 
     # Display warped image
@@ -241,7 +243,7 @@ plt.close(fig)
 # Calculate and display results for each vital sign
 print("\nFinal Results:")
 for key, values in vital_signs_history.items():
-    combined_values = values['easy'] + values['paddle'] + values['trocr']
+    combined_values = values['easy'] + values['paddle'] + values['doctr']
     if combined_values:
         mode = Counter(combined_values).most_common(1)[0][0]
         print(f"\n{key}:")
@@ -249,35 +251,35 @@ for key, values in vital_signs_history.items():
         print(f"{sample_len} Samples readings")
         print("EasyOCR readings:", values['easy'])
         print("PaddleOCR readings:", values['paddle'])
-        print("TrOCR readings:", values['trocr'])
+        print("docTR readings:", values['doctr'])
         
         # Calculate accuracy
         easy_correct = sum(1 for v in values['easy'] if v == mode)
         paddle_correct = sum(1 for v in values['paddle'] if v == mode)
-        trocr_correct = sum(1 for v in values['trocr'] if v == mode)
+        doctr_correct = sum(1 for v in values['doctr'] if v == mode)
         
         easy_accuracy = (easy_correct / sample_len) * 100
         paddle_accuracy = (paddle_correct / sample_len) * 100
-        trocr_accuracy = (trocr_correct / sample_len) * 100
+        doctr_accuracy = (doctr_correct / sample_len) * 100
         
         print(f"EasyOCR Accuracy: {easy_accuracy:.2f}%")
         print(f"PaddleOCR Accuracy: {paddle_accuracy:.2f}%")
-        print(f"TrOCR Accuracy: {trocr_accuracy:.2f}%")
+        print(f"docTR Accuracy: {doctr_accuracy:.2f}%")
     else:
         print(f"{key}: No readings")
 
 # Calculate overall accuracy
-total_easy_correct = sum(sum(1 for v in values['easy'] if v == Counter(values['easy'] + values['paddle'] + values['trocr']).most_common(1)[0][0]) for values in vital_signs_history.values())
-total_paddle_correct = sum(sum(1 for v in values['paddle'] if v == Counter(values['easy'] + values['paddle'] + values['trocr']).most_common(1)[0][0]) for values in vital_signs_history.values())
-total_trocr_correct = sum(sum(1 for v in values['trocr'] if v == Counter(values['easy'] + values['paddle'] + values['trocr']).most_common(1)[0][0]) for values in vital_signs_history.values())
+total_easy_correct = sum(sum(1 for v in values['easy'] if v == Counter(values['easy'] + values['paddle'] + values['doctr']).most_common(1)[0][0]) for values in vital_signs_history.values())
+total_paddle_correct = sum(sum(1 for v in values['paddle'] if v == Counter(values['easy'] + values['paddle'] + values['doctr']).most_common(1)[0][0]) for values in vital_signs_history.values())
+total_doctr_correct = sum(sum(1 for v in values['doctr'] if v == Counter(values['easy'] + values['paddle'] + values['doctr']).most_common(1)[0][0]) for values in vital_signs_history.values())
 
 total_easy_accuracy = (total_easy_correct / (sample_len * len(vital_signs_history))) * 100
 total_paddle_accuracy = (total_paddle_correct / (sample_len * len(vital_signs_history))) * 100
-total_trocr_accuracy = (total_trocr_correct / (sample_len * len(vital_signs_history))) * 100
+total_doctr_accuracy = (total_doctr_correct / (sample_len * len(vital_signs_history))) * 100
 
 print("\nOverall Accuracy:")
 print(f"EasyOCR: {total_easy_accuracy:.2f}%")
 print(f"PaddleOCR: {total_paddle_accuracy:.2f}%")
-print(f"TrOCR: {total_trocr_accuracy:.2f}%")
+print(f"docTR: {total_doctr_accuracy:.2f}%")
 
-print(f'Total processing time: {time.time() - prev_time:.2f} seconds')
+print(f'\nTotal processing time: {time.time() - prev_time:.2f} seconds')
