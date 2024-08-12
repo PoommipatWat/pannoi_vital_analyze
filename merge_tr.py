@@ -81,6 +81,7 @@ def sort_corners(corners):
 def process_roi(image, x1, y1, x2, y2):
     roi = image[y1:y2, x1:x2]
     roi_resized = cv2.resize(roi, (500, 250))
+    roi_resized = cv2.resize(roi, (250, 125))
     gray = cv2.cvtColor(roi_resized, cv2.COLOR_BGR2GRAY)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     contrast = clahe.apply(gray)
