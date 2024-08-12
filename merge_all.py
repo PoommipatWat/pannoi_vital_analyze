@@ -66,7 +66,6 @@ def process_roi(image, x1, y1, x2, y2):
     except Exception as e:
         print(f"EasyOCR error: {e}")
         easy_text = ""
-
     # PaddleOCR
     try:
         pad_result = pad_ocr.ocr(threshold, cls=True)
@@ -76,7 +75,6 @@ def process_roi(image, x1, y1, x2, y2):
         pad_text = ""
     # Keras-OCR
     try:
-        roi_resized = cv2.resize(roi, (120, 60))
         keras_result = keras_pipeline.recognize([roi_resized])
         keras_text = "".join([char for char in keras_result[0][0][0] if char.isdigit()])
     except Exception as e:
