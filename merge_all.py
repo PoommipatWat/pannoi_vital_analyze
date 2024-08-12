@@ -69,13 +69,14 @@ def process_roi(image, x1, y1, x2, y2):
 
     # PaddleOCR
     try:
-        pad_result = pad_ocr.ocr(roi_resized, cls=True)
+        pad_result = pad_ocr.ocr(threshold, cls=True)
         pad_text = "".join([char for char in pad_result[0][0][1][0] if char.isdigit()]) if pad_result[0] else ""
     except Exception as e:
         print(f"PaddleOCR error: {e}")
         pad_text = ""
     # Keras-OCR
     try:
+        roi_resized = cv2.resize(roi, (120, 60))
         keras_result = keras_pipeline.recognize([roi_resized])
         keras_text = "".join([char for char in keras_result[0][0][0] if char.isdigit()])
     except Exception as e:
@@ -88,8 +89,8 @@ def process_roi(image, x1, y1, x2, y2):
 roi_positions = [
     {'pulse': [1372, 262, 1570, 370]},
     {'spo2': [1350, 370, 1495, 478]},
-    {'Dia': [290, 835, 482, 935]},
-    {'Sys': [500, 835, 645, 935]}
+    {'Dia': [290, 838, 482, 935]},
+    {'Sys': [500, 838, 645, 935]}
 ]
 
 prev_time = time.time()
