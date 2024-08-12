@@ -1,0 +1,9 @@
+opencv-python==4.10.0.84
+numpy
+pupil-apriltags==1.0.4.post10
+matplotlib
+easyocr==1.7.1
+paddleocr==2.8.1
+paddlepaddle==2.6.1
+keras-ocr==0.9.3
+tensorflow==2.9.0
